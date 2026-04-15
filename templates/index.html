@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrashNet — Smart Waste Classifier</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0f0a;
+    --surface: #111a11;
+    --surface2: #1a281a;
+    --border: #2a3d2a;
+    --green: #4ade80;
+    --green-dim: #22c55e44;
+    --green-glow: #4ade8033;
+    --text: #e8f5e8;
+    --muted: #6b8f6b;
+    --white: #f0faf0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(74, 222, 128, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(74, 222, 128, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-bottom: 52px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--green-dim);
+    border: 1px solid var(--green);
+    border-radius: 100px;
+    padding: 4px 14px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--green);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  .badge::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  h1 {
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: var(--white);
+    margin-bottom: 14px;
+  }
+
+  h1 span {
+    color: var(--green);
+    position: relative;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 1rem;
+    font-weight: 400;
+    max-width: 420px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* Upload zone */
+  .upload-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 40px;
+    margin-bottom: 28px;
+    transition: border-color 0.2s;
+  }
+
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 52px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--green);
+    background: var(--green-glow);
+  }
+
+  .dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .dropzone-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    display: block;
+    filter: grayscale(0.3);
+  }
+
+  .dropzone h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: 6px;
+  }
+
+  .dropzone p {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .dropzone p span {
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  /* Preview */
+  #preview-wrap {
+    display: none;
+    margin-top: 24px;
+    text-align: center;
+  }
+
+  #preview-img {
+    max-height: 260px;
+    max-width: 100%;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    object-fit: contain;
+  }
+
+  .preview-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+
+  /* Classify button */
+  .btn-classify {
+    width: 100%;
+    margin-top: 24px;
+    padding: 16px;
+    background: var(--green);
+    color: #0a0f0a;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: none;
+  }
+
+  .btn-classify:hover {
+    background: #86efac;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px var(--green-glow);
+  }
+
+  .btn-classify:active { transform: translateY(0); }
+  .btn-classify:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Results */
+  #result-section {
+    display: none;
+    animation: fadeUp 0.4s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    margin-bottom: 20px;
+  }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .result-emoji {
+    font-size: 3rem;
+    line-height: 1;
+    background: var(--surface2);
+    border-radius: 14px;
+    width: 72px; height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+  }
+
+  .result-class {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--white);
+    text-transform: capitalize;
+    letter-spacing: -0.02em;
+  }
+
+  .result-bin {
+    font-size: 0.88rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .confidence-bar-wrap {
+    margin-bottom: 24px;
+  }
+
+  .conf-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .conf-label span:last-child {
+    color: var(--green);
+    font-weight: 600;
+    font-size: 0.88rem;
+  }
+
+  .conf-bar-track {
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 100px;
+    overflow: hidden;
+  }
+
+  .conf-bar-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 100px;
+    width: 0;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Disposal tip */
+  .tip-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    font-size: 0.9rem;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .tip-box strong {
+    color: var(--green);
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* All probabilities */
+  .probs-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px 32px;
+  }
+
+  .probs-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 20px;
+  }
+
+  .prob-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .prob-label {
+    width: 80px;
+    font-size: 0.82rem;
+    text-transform: capitalize;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .prob-label.highlight { color: var(--green); font-weight: 600; }
+
+  .prob-track {
+    flex: 1;
+    height: 5px;
+    background: var(--surface2);
+    border-radius: 100px;
+    overflow: hidden;
+  }
+
+  .prob-fill {
+    height: 100%;
+    border-radius: 100px;
+    width: 0;
+    background: var(--border);
+    transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .prob-fill.highlight { background: var(--green); }
+
+  .prob-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    width: 48px;
+    text-align: right;
+  }
+
+  .prob-pct.highlight { color: var(--green); }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid rgba(0,0,0,0.3);
+    border-top-color: rgba(0,0,0,0.9);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Error */
+  .error-box {
+    background: #1a0a0a;
+    border: 1px solid #7f1d1d;
+    border-radius: 12px;
+    padding: 16px 20px;
+    color: #fca5a5;
+    font-size: 0.9rem;
+    margin-top: 16px;
+    display: none;
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    margin-top: 56px;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  footer a { color: var(--green); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="badge">MobileNetV2 · 6 Categories</div>
+    <h1>Trash<span>Net</span></h1>
+    <p class="subtitle">Upload an image of waste — our CNN will classify it and tell you how to dispose of it correctly.</p>
+  </header>
+
+  <!-- Upload Card -->
+  <div class="upload-card">
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp">
+      <span class="dropzone-icon">🗂️</span>
+      <h3>Drop your image here</h3>
+      <p>or <span>click to browse</span> — PNG, JPG, WEBP supported</p>
+    </div>
+
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt="Preview">
+      <p class="preview-name" id="preview-name"></p>
+    </div>
+
+    <button class="btn-classify" id="classify-btn" onclick="classify()">
+      Classify Waste
+    </button>
+
+    <div class="error-box" id="error-box"></div>
+  </div>
+
+  <!-- Result -->
+  <div id="result-section">
+    <div class="result-card">
+      <div class="result-header">
+        <div class="result-emoji" id="res-emoji">♻️</div>
+        <div>
+          <div class="result-class" id="res-class">—</div>
+          <div class="result-bin" id="res-bin">—</div>
+        </div>
+      </div>
+
+      <div class="confidence-bar-wrap">
+        <div class="conf-label">
+          <span>Confidence</span>
+          <span id="conf-pct">0%</span>
+        </div>
+        <div class="conf-bar-track">
+          <div class="conf-bar-fill" id="conf-fill"></div>
+        </div>
+      </div>
+
+      <div class="tip-box">
+        <strong>♻ Disposal Tip</strong>
+        <span id="res-tip"></span>
+      </div>
+    </div>
+
+    <div class="probs-card">
+      <div class="probs-title">All probabilities</div>
+      <div id="probs-list"></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Built with TensorFlow · MobileNetV2 · TrashNet Dataset · <a href="https://github.com/garythung/trashnet" target="_blank">Dataset ↗</a></p>
+  </footer>
+</div>
+
+<script>
+let selectedFile = null;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const previewWrap = document.getElementById('preview-wrap');
+const previewImg = document.getElementById('preview-img');
+const previewName = document.getElementById('preview-name');
+const classifyBtn = document.getElementById('classify-btn');
+
+// Drag & Drop
+dropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropzone.classList.add('drag-over');
+});
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  previewImg.src = url;
+  previewName.textContent = file.name;
+  previewWrap.style.display = 'block';
+  classifyBtn.style.display = 'block';
+  document.getElementById('result-section').style.display = 'none';
+  document.getElementById('error-box').style.display = 'none';
+}
+
+async function classify() {
+  if (!selectedFile) return;
+
+  classifyBtn.disabled = true;
+  classifyBtn.innerHTML = '<span class="spinner"></span>Classifying…';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+
+  try {
+    const res = await fetch('/predict', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (data.error) {
+      showError(data.error);
+      return;
+    }
+
+    showResult(data);
+  } catch (err) {
+    showError('Server error. Make sure app.py is running.');
+  } finally {
+    classifyBtn.disabled = false;
+    classifyBtn.innerHTML = 'Classify Again';
+  }
+}
+
+function showResult(data) {
+  document.getElementById('res-emoji').textContent = data.disposal.emoji;
+  document.getElementById('res-class').textContent = data.class;
+  document.getElementById('res-bin').textContent = '→ ' + data.disposal.bin;
+  document.getElementById('res-tip').textContent = data.disposal.tip;
+  document.getElementById('conf-pct').textContent = data.confidence.toFixed(1) + '%';
+
+  // Animate confidence bar
+  setTimeout(() => {
+    document.getElementById('conf-fill').style.width = data.confidence + '%';
+  }, 50);
+
+  // All probabilities
+  const list = document.getElementById('probs-list');
+  list.innerHTML = '';
+  const sorted = Object.entries(data.all_probabilities).sort((a, b) => b[1] - a[1]);
+  sorted.forEach(([cls, pct], i) => {
+    const isTop = i === 0;
+    list.innerHTML += `
+      <div class="prob-row">
+        <div class="prob-label ${isTop ? 'highlight' : ''}">${cls}</div>
+        <div class="prob-track">
+          <div class="prob-fill ${isTop ? 'highlight' : ''}" data-pct="${pct}" style="width:0%"></div>
+        </div>
+        <div class="prob-pct ${isTop ? 'highlight' : ''}">${pct.toFixed(1)}%</div>
+      </div>`;
+  });
+
+  document.getElementById('result-section').style.display = 'block';
+  document.getElementById('error-box').style.display = 'none';
+
+  // Animate bars
+  setTimeout(() => {
+    document.querySelectorAll('.prob-fill').forEach(el => {
+      el.style.width = el.dataset.pct + '%';
+    });
+  }, 60);
+
+  document.getElementById('result-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  box.textContent = '⚠ ' + msg;
+  box.style.display = 'block';
+}
+</script>
+</body>
+</html>
